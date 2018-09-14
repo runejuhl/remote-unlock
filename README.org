@@ -1,0 +1,20 @@
+* remote-unlock
+
+Remotely unlock LUKS-encrypted disks.
+
+Meant for use together with dropbear-initramfs which spawns an SSH server in
+initramfs which can be used to unlock disks. This script reads passwords with
+`pass` (password-store) from paths in the form of `hardware/disks/$UUID`.
+
+UUIDs are automatically extraced from the crypttab, so it should be pretty
+simple to set up.
+
+It's adviced to set up SSH to use `ControlMaster auto` and `ControlPersist 2m`
+to avoid having to re-open the SSH connection on evey call. Alternatively this
+script could be improved to use the same SSH connection for all commands.
+
+Tested and working on Ubuntu 18.04 (remote) and Debian 9 (local).
+
+** Authors
+
++ [[https://github.com/runejuhl][Rune Juhl Jacobsen (runejuhl)]]
