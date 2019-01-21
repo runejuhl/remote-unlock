@@ -15,6 +15,28 @@
 #
 # Tested and working on Ubuntu 18.04 (remote) and Debian 9 (local).
 
+function usage() {
+  cat >&2 <<EOF
+Usage: ${0} [-p|--partial] user@host.tld
+EOF
+}
+
+partial=0
+
+while [[ $1 =~ ^- ]]; do
+  case $1 in
+    --partial|-p)
+      partial=1
+      ;;
+    *)
+      usage
+      exit 255
+      ;;
+  esac
+
+  shift
+done
+
 host=$1
 disks=$(ssh "$host" "cat /conf/conf.d/cryptroot")
 targets=()
@@ -42,7 +64,7 @@ for target in ${targets[*]}; do
   test -b "/dev/mapper/$target"
   if [[ $? != 0 ]]; then
     >&2 echo "Failed to unlock disk '$target'"
-    exit 1
+    [[ $partial -eq 0 ]] && exit 1
   fi
 done
 
