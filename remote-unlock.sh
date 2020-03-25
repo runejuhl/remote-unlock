@@ -14,6 +14,8 @@
 # script could be improved to use the same SSH connection for all commands.
 #
 # Tested and working on Ubuntu 18.04 (remote) and Debian 9 (local).
+#
+# shellcheck disable=SC2029
 
 function usage() {
   cat >&2 <<EOF
@@ -21,12 +23,21 @@ Usage: ${0} [-p|--partial] user@host.tld
 EOF
 }
 
-partial=0
+declare -i partial=0
+declare -i no_kill=0
+declare disks_file
 
 while [[ $1 =~ ^- ]]; do
   case $1 in
     --partial|-p)
       partial=1
+      ;;
+    --no-kill)
+      no_kill=1
+      ;;
+    --disks)
+      shift
+      disks_file="${1}"
       ;;
     *)
       usage
@@ -38,14 +49,23 @@ while [[ $1 =~ ^- ]]; do
 done
 
 host=$1
-disks=$(ssh "$host" "cat /conf/conf.d/cryptroot")
+if [[ -n "${disks_file}" ]]; then
+  disks=$(cat "${disks_file}")
+else
+  disks=$(ssh "$host" "cat /conf/conf.d/cryptroot")
+fi
 targets=()
 
 for crypt in $disks; do
   # extrance target and UUID
-  [[ "$crypt" =~ ^target=([^,]+),source=UUID=([^,]+), ]]
-  target="${BASH_REMATCH[1]}"
-  uuid="${BASH_REMATCH[2]}"
+  if [[ -n "${disks_file}" ]]; then
+    uuid="${crypt}"
+    target="disk-${crypt}"
+  else
+    [[ "$crypt" =~ ^target=([^,]+),source=UUID=([^,]+), ]]
+    target="${BASH_REMATCH[1]}"
+    uuid="${BASH_REMATCH[2]}"
+  fi
 
   if ssh "$host" "test -b '/dev/mapper/$target'"; then
     # disk already unlocked, continue
@@ -61,14 +81,15 @@ done
 
 # ensure disks did get unlocked before killing cryptsetup and resuming boot
 for target in ${targets[*]}; do
-  test -b "/dev/mapper/$target"
-  if [[ $? != 0 ]]; then
+  if test -b "/dev/mapper/$target"; then
     >&2 echo "Failed to unlock disk '$target'"
     [[ $partial -eq 0 ]] && exit 1
   fi
 done
 
-# find the pid for cryptroot so we can kill it and continue booting
-cryptroot_pid=$(ssh "$host" ps | grep '{cryptroot} /bin/sh /scripts/local-top/cryptroot' | grep -v grep | sed -r 's/^ *([0-9]+) .*?/\1/')
+if [[ $no_kill -eq 0 ]]; then
+  # find the pid for cryptroot so we can kill it and continue booting
+  cryptroot_pid=$(ssh "$host" ps | grep '{cryptroot} /bin/sh /scripts/local-top/cryptroot' | grep -v grep | sed -r 's/^ *([0-9]+) .*?/\1/')
 
-ssh "$host" kill "$cryptroot_pid"
+  ssh "$host" kill "$cryptroot_pid"
+fi
